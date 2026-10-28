@@ -2,5 +2,8 @@
   "name": "Leaf-bare Frost",
   "description": "Wintry, icy coats, snow and holly extras, ice-blue eyes. Its 25 pattern and 25 marking colours are new choices (slots 275-299), which the Creator palettes mod puts in the cat maker.",
   "enabled": false,
-  "priority": -10
+  "priority": -10,
+  "game_builds": [
+    26184573
+  ]
 }

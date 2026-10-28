@@ -2,5 +2,8 @@
   "name": "ThunderClan Forest",
   "description": "Warm gingers and rich browns, moss and bracken extras, amber and leaf-green eyes. Its 25 pattern and 25 marking colours are new choices (slots 100-124), which the Creator palettes mod puts in the cat maker.",
   "enabled": false,
-  "priority": -10
+  "priority": -10,
+  "game_builds": [
+    26184573
+  ]
 }
