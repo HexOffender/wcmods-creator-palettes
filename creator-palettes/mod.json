@@ -1,7 +1,7 @@
 {
   "name": "Creator palettes",
-  "description": "The pattern colours your palettes add (palette.json, slots from 25 up) as choices in the cat maker's colour picker, in a row under the game's. Needs wcmods 0.2.0 or newer, UE4SS, and mods that run code allowed.",
-  "version": "1.0",
+  "description": "The pattern and marking colours your palettes add (palette.json, slots from 25 up) as choices in the cat maker's colour pickers, a palette at a time in a row under the game's. Ten themed palettes come with it. Needs wcmods 0.2.0 or newer, UE4SS, and mods that run code allowed.",
+  "version": "1.1",
   "author": "wcmods",
   "game_builds": [
     26184573
