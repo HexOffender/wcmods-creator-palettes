@@ -2,5 +2,8 @@
   "name": "Vivid Clans",
   "description": "Saturated, storybook colours: bold coats, bright extras, vivid eyes. Its 25 pattern and 25 marking colours are new choices (slots 325-349), which the Creator palettes mod puts in the cat maker.",
   "enabled": false,
-  "priority": -10
+  "priority": -10,
+  "game_builds": [
+    26184573
+  ]
 }

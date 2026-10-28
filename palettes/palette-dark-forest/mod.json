@@ -2,5 +2,8 @@
   "name": "Dark Forest",
   "description": "Dim, ashen coats, rot and bone extras, blood-red and sickly eyes. Its 25 pattern and 25 marking colours are new choices (slots 250-274), which the Creator palettes mod puts in the cat maker.",
   "enabled": false,
-  "priority": -10
+  "priority": -10,
+  "game_builds": [
+    26184573
+  ]
 }

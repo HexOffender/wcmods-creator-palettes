@@ -2,5 +2,8 @@
   "name": "RiverClan Waters",
   "description": "Silvery, cool coats with river-blue greys, reed and kingfisher extras, teal and blue eyes. Its 25 pattern and 25 marking colours are new choices (slots 125-149), which the Creator palettes mod puts in the cat maker.",
   "enabled": false,
-  "priority": -10
+  "priority": -10,
+  "game_builds": [
+    26184573
+  ]
 }

@@ -2,5 +2,8 @@
   "name": "StarClan Silverpelt",
   "description": "Pale, frosted coats with a silver-blue sheen, starlight extras, eyes that glow from the pupil out. Its 25 pattern and 25 marking colours are new choices (slots 225-249), which the Creator palettes mod puts in the cat maker.",
   "enabled": false,
-  "priority": -10
+  "priority": -10,
+  "game_builds": [
+    26184573
+  ]
 }
