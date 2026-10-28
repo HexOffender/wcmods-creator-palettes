@@ -17,6 +17,10 @@
 -- CustomData's Pattern01ColorIdx or Pattern02ColorIdx), so the cat you make keeps it, and paints it on
 -- the cat maker's cat (its "Pattern Mask Color" or "Markings Mask Color"), which the game would otherwise
 -- paint only from its own colours.
+--
+-- The Fur picker shows the palettes' coat presets the same way (palette.json "coats": coats can't take new
+-- slots). A preset is painted on, the cat saved with one of the game's coats; the cats that chose one are
+-- remembered by name and painted wherever they show (see "coats in play" below).
 if not Game then
     MOD.log("WCModsGame didn't load, so there's no way to reach the cat maker")
     return
@@ -28,6 +32,9 @@ local SWATCH = UI .. "WBP_GuiColorGridItem.WBP_GuiColorGridItem_C"
 local KINDS = {
     { name = "pattern", table = "PatternMaskColors", field = "Pattern01ColorIdx", param = "Pattern Mask Color" },
     { name = "marking", table = "MarkingMaskColors", field = "Pattern02ColorIdx", param = "Markings Mask Color" },
+    -- Coats can't take new slots (the game crashes on a coat it has no nose, paw, whisker and ear colours for),
+    -- so palettes give coat presets instead: painted on, the cat saved with one of the game's coats ("like").
+    { name = "coat", table = "FurColors", field = "FurColorIdx", param = "Fur Color", presets = true },
 }
 local FIRST = 25          -- palette.json's first new slot
 -- Which palette added which new slots (wcmods 0.4 and up writes it at install): { { name, pattern = {slots},
@@ -57,6 +64,40 @@ local function linear(v)
 end
 
 local function manager() return FindFirstOf("SwtAdventureGuiManager") end
+
+-- Coat presets (palette.json "coats", which wcmods lists in WCModsPalettes): what each paints, by its id
+-- ("<palette mod>/<name>"): { preset, name, like, colour (its coat), params = { ["Fur Color"] = ..., ... } }.
+local PARAMS = { fur = "Fur Color", nose = "Nose Color", paws = "Paws Color", whiskers = "Whiskers Color",
+                 ears = "Ears Color" }
+local function hexLinear(h)
+    local r, g, b = tostring(h):match("#?(%x%x)(%x%x)(%x%x)")
+    if not r then return nil end
+    return { R = linear(tonumber(r, 16)), G = linear(tonumber(g, 16)), B = linear(tonumber(b, 16)), A = 1 }
+end
+local PRESETS = {}
+for _, g in ipairs(PALETTES or {}) do
+    for _, c in ipairs(g.coats or {}) do
+        local e = { preset = c.id, name = c.name, like = c.like, params = {} }
+        for part, param in pairs(PARAMS) do
+            if c[part] then e.params[param] = hexLinear(c[part]) end
+        end
+        e.colour = e.params["Fur Color"]
+        if e.colour and type(e.like) == "number" then PRESETS[c.id] = e end
+    end
+end
+
+-- The presets by palette, as byPalette() gives the new slots.
+local function coatGroups()
+    local out = {}
+    for _, g in ipairs(PALETTES or {}) do
+        local mine = {}
+        for _, c in ipairs(g.coats or {}) do
+            if PRESETS[c.id] then mine[#mine + 1] = PRESETS[c.id] end
+        end
+        if #mine > 0 then out[#out + 1] = { name = tostring(g.name or g.id or ""), entries = mine } end
+    end
+    return out
+end
 
 -- The colour of a slot in one of the GUI manager's tables, as a linear colour (the tables are sRGB bytes).
 local function slotColour(kind, slot)
@@ -144,20 +185,116 @@ local function kindOf(grid)
     return nil
 end
 
--- Put a colour on the cat maker's cat, on every part's materials, as the game does from its own slots.
-local function paint(cat, kind, colour)
-    local comp = cat.CustomizableMeshComponent
+-- A part's mesh with its model in: while the game sets a cat up (the cat choice loading its cats) a part can be
+-- without one for a moment, and asking it for a material then crashes the game.
+local function ready(mesh)
+    if not valid(mesh) then return false end
+    local ok, asset = pcall(function() return mesh.SkinnedAsset end)
+    return ok and valid(asset)
+end
+
+-- Each of a cat's dynamic materials, on every part: the ones the game colours.
+local function eachMaterial(comp, fn)
     for _, field in ipairs(MESHES) do
         local ok, mesh = pcall(function() return comp[field] end)
-        if ok and valid(mesh) then
+        if ok and ready(mesh) then
             for i = 0, mesh:GetNumMaterials() - 1 do
                 local mat = mesh:GetMaterial(i)
-                if valid(mat) and mat:GetClass():GetFName():ToString() == "MaterialInstanceDynamic" then
-                    mat:SetVectorParameterValue(FName(kind.param), colour)
-                end
+                if valid(mat) and mat:GetClass():GetFName():ToString() == "MaterialInstanceDynamic" then fn(mat) end
             end
         end
     end
+end
+
+local function near(a, b)
+    return math.abs(a.R - b.R) <= 0.002 and math.abs(a.G - b.G) <= 0.002 and math.abs(a.B - b.B) <= 0.002
+end
+
+-- Put colours on a cat's mesh component, as the game does from its own slots: { [parameter] = linear colour }.
+-- With `onlyChanged`, only the ones that differ from what a material holds (for cats painted again and again);
+-- how many it set.
+local function paintComp(comp, params, onlyChanged)
+    local set = 0
+    eachMaterial(comp, function(mat)
+        if onlyChanged then
+            local todo, held = {}, {}
+            mat.VectorParameterValues:ForEach(function(_, e)
+                local v = e:get()
+                local name = v.ParameterInfo.Name:ToString()
+                held[name] = true
+                if params[name] and not near(v.ParameterValue, params[name]) then todo[#todo + 1] = name end
+            end)
+            -- One the game never set on this material (the forest's cats have no ear colour of their own): set
+            -- once, it's held from then on.
+            for name in pairs(params) do
+                if not held[name] then todo[#todo + 1] = name end
+            end
+            for _, name in ipairs(todo) do
+                mat:SetVectorParameterValue(FName(name), params[name])
+                set = set + 1
+            end
+        else
+            for name, colour in pairs(params) do
+                mat:SetVectorParameterValue(FName(name), colour)
+                set = set + 1
+            end
+        end
+    end)
+    return set
+end
+
+-- A colour of a kind on the cat maker's cat; a new colour (a slot, or a coat preset with its nose, paws...).
+local function paint(cat, kind, colour) return paintComp(cat.CustomizableMeshComponent, { [kind.param] = colour }) end
+local function paintEntry(cat, kind, e)
+    return paintComp(cat.CustomizableMeshComponent, e.params or { [kind.param] = e.colour })
+end
+
+-- Cats wearing a coat preset, by their mesh component's address: { id = the preset, orig = { [parameter] = the
+-- colour the game had set } }. Some of the game's cats show one cat after another (the main menu's, the cat
+-- maker's, the inventory's): when one moves on to a cat without a preset, the game's colours go back. The game
+-- doesn't always set them again itself (not when the next cat has the same coat), so the preset would stay on.
+local painted = {}
+
+-- A cat's coat colours now (its first material's: the game sets the same on all).
+local function coatColours(comp)
+    local out = {}
+    local mesh = comp.SkelMeshComp
+    local mat = ready(mesh) and mesh:GetNumMaterials() > 0 and mesh:GetMaterial(0) or nil
+    if valid(mat) then
+        for _, param in pairs(PARAMS) do
+            local c = mat:K2_GetVectorParameterValue(FName(param))
+            out[param] = { R = c.R, G = c.G, B = c.B, A = c.A }
+        end
+    end
+    return out
+end
+
+local function wear(comp, preset)
+    local at = comp:GetAddress()
+    if not (painted[at] and painted[at].id == preset.preset) then
+        painted[at] = { id = preset.preset, orig = coatColours(comp) }
+    end
+    return paintComp(comp, preset.params, true)
+end
+
+-- The game's colours back on a cat that wore a preset, on the parts still showing it (any other, the game has
+-- set since). How many it set.
+local function unwear(comp)
+    local at = comp:GetAddress()
+    local p = painted[at]
+    painted[at] = nil
+    local was = p and PRESETS[p.id or ""]
+    if not was then return 0 end
+    local n = 0
+    eachMaterial(comp, function(mat)
+        for param, colour in pairs(was.params) do
+            if p.orig[param] and near(mat:K2_GetVectorParameterValue(FName(param)), colour) then
+                mat:SetVectorParameterValue(FName(param), p.orig[param])
+                n = n + 1
+            end
+        end
+    end)
+    return n
 end
 
 -- ------------------------------------------------------------------------------------------------ the picker
@@ -165,6 +302,8 @@ local open = nil     -- the picker showing now: { popup, grid, kind, cat, swatch
 local seen = {}      -- pickers the game has made (it makes one each time)
 local commands = nil -- the game's command numbers by name
 local before = {}    -- each cat maker cat's colour slots while no picker shows, by its address and the kind's name
+local coatOf = {}    -- the coat preset each cat maker cat wears, by its address
+local pending = nil  -- the coat preset of the cat being made, to remember by its name once it's in the forest
 local TEXT = "#f3e9c6"     -- the cat maker's cream
 
 local function readCommands()
@@ -292,7 +431,8 @@ local function showOnPage(kind, colour)
     for _, panel in ipairs(FindAllOf("WBP_GuiPanelCustomizationColors_C") or {}) do
         if valid(panel) and panel:IsVisible() then
             pcall(function()
-                local option = kind.name == "pattern" and panel.mcGuiOptionPattern or panel.mcGuiOptionMarkings
+                local option = kind.name == "pattern" and panel.mcGuiOptionPattern
+                    or kind.name == "marking" and panel.mcGuiOptionMarkings or panel.mcGuiOptionFurColor
                 option.mcGuiIcon:SetColorAndOpacity(colour)
             end)
         end
@@ -310,7 +450,7 @@ local function setActive(j)
     if j then
         if valid(native) then focus(native, false) end
         highlight(open.swatches[j], true)
-        paint(open.cat, open.kind, rowEntry(j).colour)
+        paintEntry(open.cat, open.kind, rowEntry(j))
     else
         if valid(native) then focus(native, true) end
         open.paintFrames, open.lastFocus = 20, nil
@@ -323,9 +463,19 @@ local function choose(s)
     open.chosen = true
     local cat, kind, popup = open.cat, open.kind, open.popup
     local function apply()
-        cat.CustomizableMeshComponent.CustomData[kind.field] = s.slot
-        before[cat:GetAddress() .. kind.name] = s.slot
-        paint(cat, kind, s.colour)
+        if s.preset then
+            -- A coat preset: the cat keeps one of the game's coats (what the save gets) and wears the preset.
+            local comp = cat.CustomizableMeshComponent
+            comp.CustomData[kind.field] = s.like
+            coatOf[cat:GetAddress()] = s.preset
+            pending = s.preset
+            local at = comp:GetAddress()
+            painted[at] = { id = s.preset, orig = painted[at] and painted[at].orig or {} }
+        else
+            cat.CustomizableMeshComponent.CustomData[kind.field] = s.slot
+            before[cat:GetAddress() .. kind.name] = s.slot
+        end
+        paintEntry(cat, kind, s)
         showOnPage(kind, s.colour)
     end
     apply()
@@ -336,7 +486,8 @@ local function choose(s)
         popup:OnListenCommand(commands.Button_Back, 1, pc)
     end)
     Game.after(0.1, function() if valid(cat) then apply() end end)
-    log("%s colour: slot %d", kind.name, s.slot)
+    if s.preset then log("coat: %s (saved as the game's coat %d)", s.preset, s.like)
+    else log("%s colour: slot %d", kind.name, s.slot) end
 end
 
 local function attach(popup)
@@ -344,9 +495,11 @@ local function attach(popup)
     local n = grid.Items:GetArrayNum()
     if n < 6 then return false end            -- not filled in yet
     local kind = kindOf(grid)
-    if not kind then return true end          -- fur or eyes: nothing to add
-    local entries = newSlots(kind)
-    if #entries == 0 then return true end
+    if not kind then return true end          -- eyes: nothing to add
+    local groups = kind.presets and coatGroups() or byPalette(kind, newSlots(kind))
+    local total = 0
+    for _, g in ipairs(groups) do total = total + #g.entries end
+    if total == 0 then return true end
     local cls = Game.load(SWATCH)
     if not valid(cls) then
         report("the swatch", "the game has no " .. SWATCH)
@@ -376,7 +529,6 @@ local function attach(popup)
         native[i] = { R = c.R, G = c.G, B = c.B, A = c.A }
         nativeVis[i] = grid.Items[i]:GetVisibility()
     end
-    local groups = byPalette(kind, entries)
     open = { popup = popup, grid = grid, kind = kind, cat = popup.CatRef, swatches = swatches, active = nil,
              cols = cols, count = n, views = makeViews(groups), view = 1, shown = 0, native = native,
              nativeVis = nativeVis, paintFrames = 0 }
@@ -389,21 +541,33 @@ local function attach(popup)
         return makeLabel(grid, open.labelX, dx * 0.18)
     end)
     if ok then open.label, open.labelSlot = label, slot else report("the label", label) end
+    -- The cat's own coat colours, before the picker shows others on it, to put back if it leaves the cat maker
+    -- wearing a preset (it's one of the menus' cats).
+    pcall(function()
+        local comp = open.cat.CustomizableMeshComponent
+        local at = comp:GetAddress()
+        if kind.presets and not (painted[at] and painted[at].id) then
+            painted[at] = { orig = coatColours(comp) }
+        end
+    end)
     showView(1)
-    log("%d new %s colour%s in the picker (%d palette%s)", #entries, kind.name, #entries == 1 and "" or "s",
-        #groups, #groups == 1 and "" or "s")
+    log("%d new %s%s in the picker (%d palette%s)", total, kind.name, kind.presets and " preset" .. (total == 1 and "" or "s")
+        or (" colour" .. (total == 1 and "" or "s")), #groups, #groups == 1 and "" or "s")
     -- A cat already wearing one of the new colours starts on its palette (and on it, when it's in the new row):
     -- the game can't show the slot, so it starts on its own first swatch. A moment later, once the game has.
     local cat = open.cat
-    local was = valid(cat) and before[cat:GetAddress() .. kind.name] or nil
-    if was and was >= FIRST then
+    local was = nil
+    if valid(cat) then
+        if kind.presets then was = coatOf[cat:GetAddress()] else was = before[cat:GetAddress() .. kind.name] end
+    end
+    if was and (kind.presets or was >= FIRST) then
         Game.after(0.1, function()
             if not (open and valid(popup) and open.popup:GetAddress() == popup:GetAddress()) or open.active then
                 return
             end
             for v, here in ipairs(open.views) do
                 for i, e in ipairs(here.entries or {}) do
-                    if e.slot == was then
+                    if (kind.presets and e.preset or e.slot) == was then
                         showView(v)
                         if i > open.count then setActive(i - open.count) end
                         return
@@ -460,8 +624,8 @@ Game.onFrame(function()
     if idx and open.paintFrames > 0 then
         open.paintFrames = open.paintFrames - 1
         local e = cellEntry(idx)
-        local colour = view().game and open.native[idx] or (e and e.colour)
-        if colour then pcall(paint, open.cat, open.kind, colour) end
+        if view().game then pcall(paint, open.cat, open.kind, open.native[idx])
+        elseif e then pcall(paintEntry, open.cat, open.kind, e) end
     end
 end)
 
@@ -509,31 +673,216 @@ local function onCommand(ctx, commandParam, eventParam)
     elseif confirm and not view().game then
         commandParam:set(C.NoCommand)
         if event == PRESSED then choose(cellEntry(idx)) end
+    elseif confirm and open.kind.presets and event == PRESSED then
+        -- One of the game's own coats, chosen the game's way: the cat wears no preset now.
+        coatOf[open.cat:GetAddress()] = nil
+        pending = nil
+        pcall(unwear, open.cat.CustomizableMeshComponent)
     end
 end
 
--- While the cat maker shows a cat with one of the new colours, keep it painted: the game paints the cat again
--- from its own colours when it sets it up (a new pattern, a new category). And note each cat's colours while
--- no picker shows (a picker shows its focused colour on the cat), for the picker to start on.
-Game.every(0.5, function()
-    if open then return end
-    for _, s in ipairs(seen) do
-        if valid(s.p) and s.p:IsVisible() then return end
+-- ------------------------------------------------------------------------------------------------ coats in play
+-- Which cats wear which coat preset: chosen in the cat maker, remembered by the cat's name IDs ("prefix|suffix")
+-- in a file beside your mods (not in this mod's folder, so updating the mod keeps it), and painted on those cats
+-- wherever they show: the forest, menus, portraits. The save only ever has the game's coat (the preset's "like"),
+-- so without this mod a cat just wears that.
+local RECORDS = nil
+do
+    local folder = MOD.folder and tostring(MOD.folder):gsub("\\", "/")
+    local data = folder and folder:match("^(.*)/mods/[^/]+/?$")
+    -- A mod installed from somewhere else (a folder being worked on): wcmods' own place for your files.
+    if not data then
+        local env = os.getenv("WCMODS_DATA") or (os.getenv("LOCALAPPDATA") and os.getenv("LOCALAPPDATA") .. "/WCMods")
+        data = env and env:gsub("\\", "/")
     end
-    for _, cat in ipairs(FindAllOf("BP_UI_CatCustomActor_C") or {}) do
-        if valid(cat) then
-            pcall(function()
-                local d = cat.CustomizableMeshComponent.CustomData
-                for _, kind in ipairs(KINDS) do
-                    local slot = d[kind.field]
-                    before[cat:GetAddress() .. kind.name] = slot
-                    if slot >= FIRST then
-                        local c = slotColour(kind, slot)
-                        if c then paint(cat, kind, c) end
+    if data then RECORDS = data .. "/creator-palettes-coats.json" end
+end
+local records = {}   -- name key -> coat preset id
+
+local function loadRecords()
+    if not RECORDS then return end
+    -- The file, or (a save cut short between its two renames) the copy it was being replaced with.
+    local f = io.open(RECORDS, "rb") or io.open(RECORDS .. ".tmp", "rb")
+    if not f then return end
+    local text = f:read("a")
+    f:close()
+    local ok, doc = pcall(Game.json.decode, text)
+    if ok and type(doc) == "table" and type(doc.cats) == "table" then records = doc.cats end
+end
+
+local function saveRecords()
+    if not RECORDS then return end
+    local ok, text = pcall(Game.json.encode, { _help = "Creator palettes: the coat preset each cat chose in the cat "
+                                                   .. "maker, by its name IDs (prefix|suffix).", cats = records })
+    if not ok then return report("saving the coats", text) end
+    local f = io.open(RECORDS .. ".tmp", "wb")
+    if not f then return report("saving the coats", "can't write " .. RECORDS) end
+    f:write(text, "\n")
+    f:close()
+    -- Windows can't rename onto a file: the old one steps aside first, so one of the three is always whole.
+    os.remove(RECORDS .. ".old")
+    os.rename(RECORDS, RECORDS .. ".old")
+    if os.rename(RECORDS .. ".tmp", RECORDS) then os.remove(RECORDS .. ".old") end
+end
+loadRecords()
+
+local function str(v)
+    local ok, s = pcall(function() return v:ToString() end)
+    return ok and s or tostring(v)
+end
+local function nameKey(comp)
+    local d = comp.CustomData
+    return str(d.PrefixNameId) .. "|" .. str(d.SuffixNameId)
+end
+local function prefixOf(key) return key:match("^([^|]*)|") or "" end
+local function suffixOf(key) return key:match("|(.*)$") or "" end
+-- A rank-up gives your cat a new suffix; a kit's or an apprentice's is where a cat starts, never one it moves to.
+local STARTING = { _KIT = true, _PAW = true }
+
+-- The menus' pictures of cats are taken by actors shared by every cat they show. The cat choice takes its small
+-- pictures with one, one cat after another, natively, as they load, and shows the cat chosen with another (its
+-- CatRef), live. A preset left on the first would go onto the next cat with the same coat (the game doesn't set
+-- colours it thinks are there), so out of the forest only the cat choice's own cat is dressed, while it shows: a
+-- cat wearing a preset has its saved coat in its small picture. In the forest one of them shows your cat in the
+-- inventory, live, and one takes the HUD's picture, once: that one's picture is taken again once it wears your
+-- coat (only that one: another's picture target can belong to another cat).
+local PICTURE_ACTOR = "BP_UI_CatCustomActor_C"
+local HUD_PICTURE = "RT_UI_Portrait_Exploration"
+local ticks, retaken, choiceCat = 0, {}, nil   -- choiceCat: the cat choice's own cat's address, while it shows
+local function retakeHud(owner)
+    local cap = owner.CaptureComponent
+    local target = valid(cap) and cap.TextureTarget
+    if not (valid(target) and target:GetFName():ToString() == HUD_PICTURE) then return end
+    local at = owner:GetAddress()
+    if retaken[at] and ticks - retaken[at] < 4 then return end   -- at most every 2 seconds
+    retaken[at] = ticks
+    cap:CaptureScene()
+end
+
+-- Clan cats (and your mentor): records are your own cats', and another save's clan cat can have your cat's name.
+local CLAN_CATS = { "/Script/SwtAdventure.SwtAdventureWalkingNPC", "/Script/Wrc.WrcMentorCharacter" }
+local clanClasses = nil
+local function isClanCat(owner)
+    if not clanClasses then
+        clanClasses = {}
+        for _, path in ipairs(CLAN_CATS) do
+            local cls = StaticFindObject(path)
+            if valid(cls) then clanClasses[#clanClasses + 1] = cls end
+        end
+    end
+    for _, cls in ipairs(clanClasses) do
+        if owner:IsA(cls) then return true end
+    end
+    return false
+end
+
+-- What a cat should wear from here: the preset its name has, or none.
+local function dress(comp, owner, inForest)
+    local picture = valid(owner) and owner:GetClass():GetFName():ToString() == PICTURE_ACTOR
+    local preset = PRESETS[records[nameKey(comp)] or ""]
+    if picture and not inForest and owner:GetAddress() ~= choiceCat then preset = nil end
+    if preset and inForest and not picture and valid(owner) and isClanCat(owner) then preset = nil end
+    local n = 0
+    if preset then
+        n = wear(comp, preset)
+    elseif painted[comp:GetAddress()] then
+        n = unwear(comp)
+    end
+    if n > 0 and picture then retakeHud(owner) end
+end
+
+-- Twice a second. In the cat maker: keep its cat painted (the game paints the cat again from its own colours
+-- when it sets it up: a new pattern, a new category), and note each cat's colours while no picker shows (a picker
+-- shows its focused colour on the cat), for the picker to start on. In play: the cats that chose a coat preset.
+local COAT = KINDS[3]
+Game.every(0.5, function()
+    ticks = ticks + 1
+    local picking = open ~= nil
+    for _, sn in ipairs(seen) do
+        if valid(sn.p) and sn.p:IsVisible() then picking = true end
+    end
+    if not picking then
+        for _, cat in ipairs(FindAllOf("BP_UI_CatCustomActor_C") or {}) do
+            if valid(cat) then
+                pcall(function()
+                    local d = cat.CustomizableMeshComponent.CustomData
+                    for _, kind in ipairs(KINDS) do
+                        local slot = d[kind.field]
+                        before[cat:GetAddress() .. kind.name] = slot
+                        if not kind.presets and slot >= FIRST then
+                            local c = slotColour(kind, slot)
+                            if c then paint(cat, kind, c) end
+                        end
+                    end
+                    local preset = pending and PRESETS[coatOf[cat:GetAddress()] or ""]
+                    if preset then
+                        paintEntry(cat, COAT, preset)
+                        showOnPage(COAT, preset.colour)     -- the page shows the saved coat's otherwise
+                    end
+                end)
+            end
+        end
+    end
+    local function showing(screen)
+        for _, m in ipairs(FindAllOf(screen) or {}) do
+            if valid(m) and m:IsVisible() then return m end
+        end
+        return nil
+    end
+    local choice = (pending or next(records) ~= nil) and showing("WBP_GuiScreenSelectYourCat_C") or nil
+    choiceCat = nil
+    pcall(function()
+        if choice and valid(choice.CatRef) then choiceCat = choice.CatRef:GetAddress() end
+    end)
+    -- Back at the main menu or the cat choice, the cat that was being made isn't coming: forget its preset, and
+    -- take it off the cat maker's cat (the game uses that one for other cats' pictures).
+    if pending then
+        if choice or showing("WBP_GuiScreenMainMenu_C") then
+            pending, coatOf = nil, {}
+            for _, cat in ipairs(FindAllOf(PICTURE_ACTOR) or {}) do
+                if valid(cat) then pcall(unwear, cat.CustomizableMeshComponent) end
+            end
+        end
+    end
+    if next(records) == nil and not pending then return end
+    local here = {}
+    local pawn = Game.player()
+    local inForest = valid(pawn)
+    for _, comp in ipairs(FindAllOf("SwtAdventureCustomizableMeshComponent") or {}) do
+        if valid(comp) then
+            local ok, why = pcall(function()
+                local key = nameKey(comp)
+                local owner = comp:GetOwner()
+                if valid(pawn) and valid(owner) and owner:GetAddress() == pawn:GetAddress() then
+                    -- Your cat in the forest. The one just made takes its preset under its name now that it has
+                    -- one (it's wearing the preset's game coat, unless the game swapped a Feral Edition one).
+                    local made = pending and PRESETS[pending]
+                    if made and (comp.CustomData.FurColorIdx == made.like or made.like >= 20) then
+                        records[key], pending, coatOf = made.preset, nil, {}
+                        saveRecords()
+                        log("your cat's coat: %s", made.preset)
+                    end
+                    -- After a rank-up its suffix changes and its prefix stays (and it still has the preset's coat).
+                    if not records[key] and prefixOf(key) ~= "" and not STARTING[suffixOf(key)] then
+                        for k, v in pairs(records) do
+                            local was = PRESETS[v]
+                            if k ~= key and prefixOf(k) == prefixOf(key)
+                               and (not was or was.like >= 20 or comp.CustomData.FurColorIdx == was.like) then
+                                records[key], records[k] = v, nil
+                                saveRecords()
+                                break
+                            end
+                        end
                     end
                 end
+                here[comp:GetAddress()] = true
+                if not (pending and valid(owner) and coatOf[owner:GetAddress()]) then dress(comp, owner, inForest) end
             end)
+            if not ok then report("painting a coat", why) end
         end
+    end
+    for at in pairs(painted) do
+        if not here[at] then painted[at] = nil end      -- gone
     end
 end)
 
@@ -548,4 +897,4 @@ else
     if not ok then log("can't hear the picker's keys: %s", tostring(err)) end
 end
 follow()
-MOD.log("ready: new pattern and marking colours go in the cat maker's picker")
+MOD.log("ready: new pattern and marking colours and coat presets go in the cat maker's pickers")

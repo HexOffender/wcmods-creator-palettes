@@ -1,0 +1,90 @@
+{
+  "_help": "Coat presets for the cat maker's Fur picker (the Creator palettes mod). Each is painted on; \"like\" is the game's coat (0-19) a cat wearing it is saved with, the nearest to it.",
+  "coats": {
+    "Ash": {
+      "fur": "#8f8a85",
+      "nose": "#3d3533",
+      "paws": "#4a4442",
+      "ears": "#b39a98",
+      "like": 11
+    },
+    "Smoke": {
+      "fur": "#5b5a5e",
+      "nose": "#2b2626",
+      "paws": "#3a383c",
+      "ears": "#8a7f86",
+      "like": 13
+    },
+    "Cream": {
+      "fur": "#efe0c4",
+      "nose": "#d9a3a0",
+      "paws": "#e8c8bf",
+      "ears": "#f0c4b8",
+      "like": 0
+    },
+    "Fawn": {
+      "fur": "#c8a27a",
+      "nose": "#a8706a",
+      "paws": "#b98c80",
+      "ears": "#e0b4a4",
+      "like": 6
+    },
+    "Cinnamon": {
+      "fur": "#a0522d",
+      "nose": "#6b3a2e",
+      "paws": "#7a4636",
+      "ears": "#d4a08a",
+      "like": 7
+    },
+    "Chocolate": {
+      "fur": "#5a3a29",
+      "nose": "#3a2420",
+      "paws": "#4a2e26",
+      "ears": "#9a6a5a",
+      "like": 8
+    },
+    "Golden": {
+      "fur": "#d9a441",
+      "nose": "#b56a4a",
+      "paws": "#c98a66",
+      "ears": "#f0bc94",
+      "like": 3
+    },
+    "Lilac": {
+      "fur": "#b9a7b5",
+      "nose": "#9c7e8e",
+      "paws": "#a08896",
+      "ears": "#d8b9c6",
+      "like": 11
+    },
+    "Silver": {
+      "fur": "#c0c4c8",
+      "nose": "#8a7f86",
+      "paws": "#9a9aa2",
+      "ears": "#d6c4c8",
+      "like": 11
+    },
+    "Midnight": {
+      "fur": "#1e2433",
+      "nose": "#10131c",
+      "paws": "#2a2f3d",
+      "ears": "#3b4256",
+      "like": 14
+    },
+    "Starlight": {
+      "fur": "#c9d6ff",
+      "nose": "#8fa6ff",
+      "paws": "#a9b8ff",
+      "whiskers": "#ffffff",
+      "ears": "#e6ecff",
+      "like": 10
+    },
+    "Ember": {
+      "fur": "#b8321e",
+      "nose": "#4a1a10",
+      "paws": "#6a2416",
+      "ears": "#ff8a50",
+      "like": 4
+    }
+  }
+}
