@@ -1,6 +1,8 @@
 {
   "name": "Coat presets",
   "description": "Twelve coats of their own (fur, nose, paws and ears), from Ash to Starlight, as choices in the cat maker's Fur picker with the Creator palettes mod. Painted on: a cat that chose one is saved with the game's coat nearest it, which it wears with the mod off.",
+  "wcmods": "0.4.0",
+  "tool": true,
   "enabled": true,
   "priority": 0,
   "game_builds": [

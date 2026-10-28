@@ -85,8 +85,9 @@ order. One with more than 25 takes more than one view.
 - **The colour belongs to the palette.** A cat made with one wears it while that palette is on.
 - After **Up** from a cat's own new colour (when the picker opened on it), you land on the game's first
   colour, where the game put its own focus.
-- **Palette by palette** needs a wcmods newer than 0.3.0 (it lists the palettes for scripts: the
-  `WCModsPalettes` module). With 0.3.0 all the new colours are one "New colours" palette, 25 to a view.
+- **Palette by palette** needs Clan Mod Studio 0.4.0 or newer (it lists the palettes for scripts: the
+  `WCModsPalettes` module). With 0.2.0 or 0.3.0 all the new colours are one "New colours" palette, 25 to a
+  view.
 
 Coat presets:
 
@@ -102,26 +103,37 @@ Coat presets:
   are never painted, even one with your cat's name.
 - **Your cat only**: presets are for the cat you make. To colour clan cats, wcmods' `cats.json` has
   colours by name.
-- **Needs a wcmods that knows `coats`** (newer than 0.3.0). With an older one, the Coat presets palette is
-  skipped when you install, with an error ("unknown palette section 'coats'"), and the Fur picker shows
-  no presets.
+- **Needs Clan Mod Studio 0.4.0 or newer**, the first that knows `coats`. With an older one, the Coat
+  presets palette is skipped when you install, with an error ("unknown palette section 'coats'"), and the
+  Fur picker shows no presets.
 
 ## Getting it
 
-- Download `creator-palettes-<version>.zip` from [Releases](../../releases) and drop it on Clan Mod
-  Studio's Mods page, or `python wcmods.py add creator-palettes-<version>.zip` in your wcmods folder. It
-  adds the mod and the ten palettes (and updates them if you have them, keeping a backup).
+The latest is 1.2.0, on the [Releases](https://github.com/HexOffender/wcmods-creator-palettes/releases)
+page.
+
+- **From Clan Mod Studio 0.4.0 or newer:** **Add all four** in **Get set up** on the Mods page adds it with
+  the other mods that go with Clan Mod Studio. Or press **Add** on its row of the **Mods that go with Clan
+  Mod Studio** card, where **Get the latest** updates it later. A palette of yours with the same folder
+  name as one that comes with it is left as it is.
+- **Or drop the .zip:** download `creator-palettes-1.2.0.zip` from
+  [Releases](https://github.com/HexOffender/wcmods-creator-palettes/releases) and drop it on Clan Mod
+  Studio's Mods page, or `python wcmods.py add creator-palettes-1.2.0.zip` in your wcmods folder. It adds
+  the mod and the eleven palettes (and updates them if you have them, keeping a backup).
+- The ten themed palettes go in switched off, and Coat presets goes in on. Switch on the ones you want on
+  the Mods page.
 - It's an in-game Lua script, so like any script it runs only with **mods that run code allowed**
   (Options, on Clan Mod Studio's Settings and repair page), and it needs the script loader (UE4SS,
   which Get set up installs). Then Apply to game (or press Play).
-- It needs wcmods 0.2.0 or newer. Palettes of your own: on Clan Mod Studio's Palettes page, **Add a new
-  pattern colour** makes one (it takes the next slot no other palette uses).
+- **What it needs:** Clan Mod Studio (wcmods) 0.2.0 or newer for the new colours. **Coat presets need
+  Clan Mod Studio 0.4.0**, and so does palette by palette. Palettes of your own: on Clan Mod Studio's
+  Palettes page, **Add a new pattern colour** makes one (it takes the next slot no other palette uses).
 
 ## How it's made
 
 ```
 creator-palettes/   the mod as it goes in your mods folder
-  mod.json          its name, version and the game builds it was made for
+  mod.json          its name, version, the oldest wcmods it needs and the game builds it was made for
   scripts/main.lua  the new row
 palettes/           the palettes that come with it, each mod.json and palette.json
   palette-*/        the ten themed ones, as wcmods-examples has them (made by wcmods' tools/make_palettes.py)
@@ -154,7 +166,8 @@ in your wcmods folder installs a test build with both.
 ## Releasing
 
 1. Raise `"version"` in `creator-palettes/mod.json`. A release that needs something new in wcmods (1.2.0's
-   coat presets need the `coats` section) goes out after the wcmods release that has it, and its notes say so. After a game update, try it on the new build and add
+   coat presets need the `coats` section) goes out after the wcmods release that has it, and its notes say so;
+   the mod.json of the mod that needs it says that wcmods (`"wcmods": "0.4.0"`). After a game update, try it on the new build and add
    its number to `"game_builds"` (`python wcmods.py game build` shows it).
 2. When the palettes change: `python tools/make_palettes.py --out ../wcmods-examples` in wcmods, then copy
    wcmods-examples' `palette-*` folders into `palettes/` (`palette-coat-presets` is this repo's own: keep it).
