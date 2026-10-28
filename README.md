@@ -98,7 +98,8 @@ Coat presets:
 - **Parts a preset doesn't set** keep the game's colours: in the forest its saved coat's, in the cat maker
   the ones of the coat under the cursor.
 - **By name.** Two of your cats with the same name (in different saves) share one. After a rank-up (a new
-  suffix, the same prefix) your cat keeps its preset while it still has the preset's saved coat.
+  suffix, the same prefix) your cat keeps its preset while it still has the preset's saved coat. Clan cats
+  are never painted, even one with your cat's name.
 - **Your cat only**: presets are for the cat you make. To colour clan cats, wcmods' `cats.json` has
   colours by name.
 - **Needs a wcmods that knows `coats`** (newer than 0.3.0). With an older one, the Coat presets palette is
@@ -152,7 +153,8 @@ in your wcmods folder installs a test build with both.
 
 ## Releasing
 
-1. Raise `"version"` in `creator-palettes/mod.json`. After a game update, try it on the new build and add
+1. Raise `"version"` in `creator-palettes/mod.json`. A release that needs something new in wcmods (1.2.0's
+   coat presets need the `coats` section) goes out after the wcmods release that has it, and its notes say so. After a game update, try it on the new build and add
    its number to `"game_builds"` (`python wcmods.py game build` shows it).
 2. When the palettes change: `python tools/make_palettes.py --out ../wcmods-examples` in wcmods, then copy
    wcmods-examples' `palette-*` folders into `palettes/` (`palette-coat-presets` is this repo's own: keep it).

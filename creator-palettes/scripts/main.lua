@@ -556,7 +556,10 @@ local function attach(popup)
     -- A cat already wearing one of the new colours starts on its palette (and on it, when it's in the new row):
     -- the game can't show the slot, so it starts on its own first swatch. A moment later, once the game has.
     local cat = open.cat
-    local was = valid(cat) and (kind.presets and coatOf[cat:GetAddress()] or before[cat:GetAddress() .. kind.name]) or nil
+    local was = nil
+    if valid(cat) then
+        if kind.presets then was = coatOf[cat:GetAddress()] else was = before[cat:GetAddress() .. kind.name] end
+    end
     if was and (kind.presets or was >= FIRST) then
         Game.after(0.1, function()
             if not (open and valid(popup) and open.popup:GetAddress() == popup:GetAddress()) or open.active then
@@ -698,7 +701,8 @@ local records = {}   -- name key -> coat preset id
 
 local function loadRecords()
     if not RECORDS then return end
-    local f = io.open(RECORDS, "rb")
+    -- The file, or (a save cut short between its two renames) the copy it was being replaced with.
+    local f = io.open(RECORDS, "rb") or io.open(RECORDS .. ".tmp", "rb")
     if not f then return end
     local text = f:read("a")
     f:close()
@@ -715,8 +719,10 @@ local function saveRecords()
     if not f then return report("saving the coats", "can't write " .. RECORDS) end
     f:write(text, "\n")
     f:close()
-    os.remove(RECORDS)
-    os.rename(RECORDS .. ".tmp", RECORDS)
+    -- Windows can't rename onto a file: the old one steps aside first, so one of the three is always whole.
+    os.remove(RECORDS .. ".old")
+    os.rename(RECORDS, RECORDS .. ".old")
+    if os.rename(RECORDS .. ".tmp", RECORDS) then os.remove(RECORDS .. ".old") end
 end
 loadRecords()
 
@@ -729,6 +735,9 @@ local function nameKey(comp)
     return str(d.PrefixNameId) .. "|" .. str(d.SuffixNameId)
 end
 local function prefixOf(key) return key:match("^([^|]*)|") or "" end
+local function suffixOf(key) return key:match("|(.*)$") or "" end
+-- A rank-up gives your cat a new suffix; a kit's or an apprentice's is where a cat starts, never one it moves to.
+local STARTING = { _KIT = true, _PAW = true }
 
 -- The menus' pictures of cats are taken by actors shared by every cat they show. The cat choice takes its small
 -- pictures with one, one cat after another, natively, as they load, and shows the cat chosen with another (its
@@ -750,11 +759,29 @@ local function retakeHud(owner)
     cap:CaptureScene()
 end
 
+-- Clan cats (and your mentor): records are your own cats', and another save's clan cat can have your cat's name.
+local CLAN_CATS = { "/Script/SwtAdventure.SwtAdventureWalkingNPC", "/Script/Wrc.WrcMentorCharacter" }
+local clanClasses = nil
+local function isClanCat(owner)
+    if not clanClasses then
+        clanClasses = {}
+        for _, path in ipairs(CLAN_CATS) do
+            local cls = StaticFindObject(path)
+            if valid(cls) then clanClasses[#clanClasses + 1] = cls end
+        end
+    end
+    for _, cls in ipairs(clanClasses) do
+        if owner:IsA(cls) then return true end
+    end
+    return false
+end
+
 -- What a cat should wear from here: the preset its name has, or none.
 local function dress(comp, owner, inForest)
     local picture = valid(owner) and owner:GetClass():GetFName():ToString() == PICTURE_ACTOR
     local preset = PRESETS[records[nameKey(comp)] or ""]
     if picture and not inForest and owner:GetAddress() ~= choiceCat then preset = nil end
+    if preset and inForest and not picture and valid(owner) and isClanCat(owner) then preset = nil end
     local n = 0
     if preset then
         n = wear(comp, preset)
@@ -802,7 +829,7 @@ Game.every(0.5, function()
         end
         return nil
     end
-    local choice = showing("WBP_GuiScreenSelectYourCat_C")
+    local choice = (pending or next(records) ~= nil) and showing("WBP_GuiScreenSelectYourCat_C") or nil
     choiceCat = nil
     pcall(function()
         if choice and valid(choice.CatRef) then choiceCat = choice.CatRef:GetAddress() end
@@ -836,7 +863,7 @@ Game.every(0.5, function()
                         log("your cat's coat: %s", made.preset)
                     end
                     -- After a rank-up its suffix changes and its prefix stays (and it still has the preset's coat).
-                    if not records[key] and prefixOf(key) ~= "" then
+                    if not records[key] and prefixOf(key) ~= "" and not STARTING[suffixOf(key)] then
                         for k, v in pairs(records) do
                             local was = PRESETS[v]
                             if k ~= key and prefixOf(k) == prefixOf(key)
